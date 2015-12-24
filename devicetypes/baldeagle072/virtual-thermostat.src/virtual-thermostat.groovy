@@ -1,5 +1,5 @@
 /*
- *  Virtual Thermostat
+ *  Virtual Thermostat multi
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may
  *  not use this file except in compliance with the License. You may obtain a
@@ -34,9 +34,38 @@ metadata{
     command "temperature"
     command "humidity"
     command "setState"
+    command "setTemperature"
   }
 
-  tiles{
+  tiles(scale: 2){
+  	multiAttributeTile(name:"thermostatMulti", type:"thermostat", width:6, height:4) {
+      tileAttribute("device.temperature", key: "PRIMARY_CONTROL") {
+        attributeState("default", label:'${currentValue}°')
+      }
+      tileAttribute("device.temperature", key: "VALUE_CONTROL") {
+        attributeState("default", action: "setTemperature")
+      }
+      tileAttribute("device.humidity", key: "SECONDARY_CONTROL") {
+        attributeState("default", label:'${currentValue}%', unit:"%")
+      }
+      tileAttribute("device.thermostatOperatingState", key: "OPERATING_STATE") {
+        attributeState("idle", backgroundColor:"#44b621")
+        attributeState("heating", backgroundColor:"#ffa81e")
+        attributeState("cooling", backgroundColor:"#269bd2")
+      }
+      tileAttribute("device.thermostatMode", key: "THERMOSTAT_MODE") {
+        attributeState("off", label:'${name}')
+        attributeState("heat", label:'${name}')
+        attributeState("cool", label:'${name}')
+        attributeState("auto", label:'${name}')
+      }
+      tileAttribute("device.heatingSetpoint", key: "HEATING_SETPOINT") {
+        attributeState("default", label:'${currentValue}', unit:"dF")
+      }
+      tileAttribute("device.coolingSetpoint", key: "COOLING_SETPOINT") {
+        attributeState("default", label:'${currentValue}', unit:"dF")
+      }
+	}
     valueTile("temperature", "device.temperature", width: 1, height: 1) {
       state("temperature", label:'${currentValue}°', unit:"F",
         backgroundColors:[
@@ -61,27 +90,7 @@ metadata{
         state "on", label:'', action:"switchFanMode", icon:"st.thermostat.fan-on"
         state "off", label:'', action:"switchFanMode", icon:"st.thermostat.fan-off"
     }
-    valueTile("heatingSetpoint", "device.heatingSetpoint", inactiveLabel: false) {
-        state "heat", label:'${currentValue}° heat', unit:"F", backgroundColor:"#f07171"
-    }
-    valueTile("coolingSetpoint", "device.coolingSetpoint", inactiveLabel: false) {
-        state "cool", label:'${currentValue}° cool', unit:"F", backgroundColor:"#719bf0"
-    }
-    standardTile("heatLevelUp", "device.heatingSetpoint", canChangeIcon: false, inactiveLabel: false, decoration: "flat") {
-        state "heatLevelUp", label:'  ', action:"heatLevelUp", icon:"st.thermostat.thermostat-up"
-    }
-    standardTile("heatLevelDown", "device.heatingSetpoint", canChangeIcon: false, inactiveLabel: false, decoration: "flat") {
-        state "heatLevelDown", label:'  ', action:"heatLevelDown", icon:"st.thermostat.thermostat-down"
-    }
-    standardTile("coolLevelUp", "device.heatingSetpoint", canChangeIcon: false, inactiveLabel: false, decoration: "flat") {
-        state "coolLevelUp", label:'  ', action:"coolLevelUp", icon:"st.thermostat.thermostat-up"
-    }
-    standardTile("coolLevelDown", "device.heatingSetpoint", canChangeIcon: false, inactiveLabel: false, decoration: "flat") {
-        state "coolLevelDown", label:'  ', action:"coolLevelDown", icon:"st.thermostat.thermostat-down"
-    }
-    valueTile("humidity", "device.humidity", inactiveLabel: false){
-        state "humidity", label:'${currentValue}% humidity', unit:"", backgroundColor: "#ffffff"
-    }
+    
     valueTile("thermostatOperatingState", "device.thermostatOperatingState", width: 1, height: 1) {
         state "default", label:'${currentValue}', action:"", unit:"",
         backgroundColors:[
@@ -92,8 +101,8 @@ metadata{
         ]
     }
 
-    main("temperature")
-    details(["thermostatOperatingState", "mode", "fanMode", "coolLevelDown", "coolingSetpoint", "coolLevelUp", "heatLevelDown", "heatingSetpoint", "heatLevelUp", "temperature", "humidity"])
+    main("thermostatMulti")
+    details(["thermostatMulti", "thermostatOperatingState", "mode", "fanMode"])
   }
 
     simulator{
@@ -104,6 +113,28 @@ metadata{
       for(int x = 0; x <= 100; x += 20){
         status "Temperature ${x}%": "temperature:${x}"
       }
+    }
+}
+
+def setTemperature(value) {
+	def increaseTemp = device.currentValue('temperature') < value
+    def newHSetpoint
+    def newCSetpoint
+	switch (device.currentValue('thermostatMode')) {
+    	case "heat":
+        	increaseTemp ? (newHSetpoint = device.currentValue("heatingSetpoint") + 1) : (newHSetpoint = device.currentValue("heatingSetpoint") - 1)
+            setHeatingSetpoint(newHSetpoint.toInteger())
+            break
+        case "cool":
+        	increaseTemp ? (newCSetpoint = device.currentValue("coolingSetpoint") + 1) : (newCSetpoint = device.currentValue("coolingSetpoint") - 1)
+            setCoolingSetpoint(newCSetpoint.toInteger())
+            break
+        case "auto":
+        	increaseTemp ? (newHSetpoint = device.currentValue("heatingSetpoint") + 1) : (newHSetpoint = device.currentValue("heatingSetpoint") - 1)
+            setHeatingSetpoint(newHSetpoint.toInteger())
+            increaseTemp ? (newCSetpoint = device.currentValue("coolingSetpoint") + 1) : (newCSetpoint = device.currentValue("coolingSetpoint") - 1)
+            setCoolingSetpoint(newCSetpoint.toInteger())
+        	break
     }
 }
 
@@ -299,10 +330,12 @@ def setThermostatFanMode(String value) {
 }
 
 def off() {
+	log.debug("OFF")
   sendEvent(name: "thermostatMode", value: "off")
 }
 
 def heat() {
+	log.debug("HEAT")
   sendEvent(name: "thermostatMode", value: "heat")
 }
 
